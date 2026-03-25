@@ -1,0 +1,2 @@
+[console_scripts]
+llmdiff = llmdiff.cli:main
