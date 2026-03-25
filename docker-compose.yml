@@ -1,0 +1,11 @@
+services:
+  llmdiff:
+    build: .
+    ports:
+      - "7331:7331"
+    volumes:
+      - ./tests:/workspace/tests
+    environment:
+      - GROQ_API_KEY=${GROQ_API_KEY:-}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
