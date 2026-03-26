@@ -24,6 +24,17 @@ Which response better satisfies the criterion? Reply with exactly one of: A, B, 
 Then on the next line, one sentence explaining your reasoning.
 """
 
+ABSOLUTE_JUDGE_PROMPT = """\
+You are evaluating an AI assistant's output against a reference answer.
+
+Question: {input}
+Reference answer: {reference_answer}
+Output to evaluate: {output}
+
+Does this output correctly and completely answer the question given the reference answer?
+Respond with only a number between 0.0 and 1.0, where 1.0 means perfect and 0.0 means completely wrong.
+"""
+
 
 def _parse_verdict(text: str) -> tuple[str, str]:
     """Extract (verdict, reasoning) from a judge model response."""
@@ -51,17 +62,81 @@ def _parse_verdict(text: str) -> tuple[str, str]:
     return verdict, reasoning or "No reasoning provided."
 
 
+def _call_judge(prompt: str, judge_model: str) -> str:
+    """Make a single judge model call with retry logic. Returns raw text."""
+    for attempt in range(4):
+        try:
+            response = litellm.completion(
+                model=judge_model,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            text = response.choices[0].message.content
+            time.sleep(2)  # stay under 30 RPM free tier limit
+            return text
+        except litellm.RateLimitError:
+            wait = 2 ** attempt * 5  # 5s, 10s, 20s, 40s
+            logger.warning(f"Rate limited, retrying in {wait}s...")
+            time.sleep(wait)
+        except Exception as e:
+            logger.error(f"Judge call failed: {e}")
+            return ""
+    return ""
+
+
 def judge_pair(
     input: str,
     output_v1: str,
     output_v2: str,
     criterion: str,
     judge_model: str,
+    reference_answer: str | None = None,
 ) -> dict:
-    """Judge a single criterion between two outputs using 3x majority vote.
+    """Judge a single criterion between two outputs.
+
+    When reference_answer is provided, uses absolute scoring mode (0.0–1.0 per output).
+    Otherwise uses A/B comparison mode with 3x majority vote.
 
     Returns a dict matching the criteria_results shape in CLAUDE.md.
     """
+    if reference_answer is not None:
+        # Absolute scoring mode: score each output independently against the reference
+        def _score_output(output: str) -> float:
+            prompt = ABSOLUTE_JUDGE_PROMPT.format(
+                input=input,
+                reference_answer=reference_answer,
+                output=output,
+            )
+            scores = []
+            for _ in range(2):
+                text = _call_judge(prompt, judge_model)
+                try:
+                    scores.append(float(text.strip()))
+                except (ValueError, AttributeError):
+                    scores.append(0.5)
+            return sum(scores) / len(scores)
+
+        score_v1 = round(_score_output(output_v1), 4)
+        score_v2 = round(_score_output(output_v2), 4)
+        delta = round(score_v2 - score_v1, 4)
+
+        if delta > 0.1:
+            verdict = "improved"
+        elif delta < -0.1:
+            verdict = "regressed"
+        else:
+            verdict = "neutral"
+
+        return {
+            "criterion": criterion,
+            "score_v1": score_v1,
+            "score_v2": score_v2,
+            "delta": delta,
+            "verdict": verdict,
+            "reasoning": f"Absolute scores — v1: {score_v1}, v2: {score_v2}",
+            "confidence": "high",
+        }
+
+    # A/B comparison mode: 3x majority vote
     prompt = JUDGE_PROMPT.format(
         input=input,
         criterion=criterion,
@@ -73,31 +148,13 @@ def judge_pair(
     reasoning_samples = []
 
     for _ in range(3):
-        for attempt in range(4):  # up to 4 attempts with backoff
-            try:
-                response = litellm.completion(
-                    model=judge_model,
-                    messages=[{"role": "user", "content": prompt}],
-                )
-                text = response.choices[0].message.content
-                verdict, reasoning = _parse_verdict(text)
-                verdicts.append(verdict)
-                reasoning_samples.append(reasoning)
-                time.sleep(2)  # stay under 30 RPM free tier limit
-                break
-            except litellm.RateLimitError:
-                wait = 2 ** attempt * 5  # 5s, 10s, 20s, 40s
-                logger.warning(f"Rate limited, retrying in {wait}s...")
-                time.sleep(wait)
-            except Exception as e:
-                logger.error(f"Judge call failed: {e}")
-                verdicts.append("tie")
-                reasoning_samples.append("Judge call failed.")
-                break
+        text = _call_judge(prompt, judge_model)
+        if text:
+            verdict, reasoning = _parse_verdict(text)
         else:
-            # All retry attempts exhausted
-            verdicts.append("tie")
-            reasoning_samples.append("Judge call failed after retries.")
+            verdict, reasoning = "tie", "Judge call failed."
+        verdicts.append(verdict)
+        reasoning_samples.append(reasoning)
 
     # Majority vote
     counts = {"a": verdicts.count("a"), "b": verdicts.count("b"), "tie": verdicts.count("tie")}
@@ -152,6 +209,7 @@ def judge_test_case(runner_result: dict, criteria: list[str], judge_model: str) 
 
     Returns the full test case result shape with criteria_results and overall_verdict.
     """
+    reference_answer = runner_result.get("reference_answer")
     criteria_results = []
     for criterion in criteria:
         result = judge_pair(
@@ -160,6 +218,7 @@ def judge_test_case(runner_result: dict, criteria: list[str], judge_model: str) 
             output_v2=runner_result["output_v2"],
             criterion=criterion,
             judge_model=judge_model,
+            reference_answer=reference_answer,
         )
         criteria_results.append(result)
 
