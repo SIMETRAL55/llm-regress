@@ -6,6 +6,12 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Powered by Groq](https://img.shields.io/badge/Powered%20by-Groq-orange)](https://console.groq.com)
 
+<br/>
+
+![LLM Diff dashboard — side-by-side prompt comparison and score trend chart](img/terminal.png)
+
+<br/>
+
 ## Why LLM Diff
 
 - **You changed a prompt. Did it get better?** Find out in 2 minutes.
