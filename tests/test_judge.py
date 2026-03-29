@@ -3,7 +3,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from llmdiff.judge import judge_pair, judge_test_case, judge_run, ABSOLUTE_JUDGE_PROMPT
+from backend.judge import judge_pair, judge_test_case, judge_run, ABSOLUTE_JUDGE_PROMPT
 
 
 def _mock_resp(text):
@@ -16,10 +16,10 @@ def _side_effects(*texts):
     return [_mock_resp(t) for t in texts]
 
 
-@patch("llmdiff.judge.litellm.completion")
+@patch("backend.judge.litellm.completion")
 def test_unanimous_b_is_improved_high_confidence(mock_comp):
     mock_comp.side_effect = _side_effects("B\nv2 is better.", "B\nv2 is better.", "B\nv2 is better.")
-    result = judge_pair("q", "out_v1", "out_v2", "criterion", "groq/llama3-70b-8192")
+    result = judge_pair("q", "out_v1", "out_v2", "criterion", "groq/llama3-70b-8192", votes=3)
     assert result["verdict"] == "improved"
     assert result["confidence"] == "high"
     assert result["score_v2"] == 1.0
@@ -27,10 +27,10 @@ def test_unanimous_b_is_improved_high_confidence(mock_comp):
     assert result["delta"] == 1.0
 
 
-@patch("llmdiff.judge.litellm.completion")
+@patch("backend.judge.litellm.completion")
 def test_majority_a_is_regressed_medium_confidence(mock_comp):
     mock_comp.side_effect = _side_effects("A\nv1 is better.", "A\nv1 is better.", "B\nv2 is better.")
-    result = judge_pair("q", "out_v1", "out_v2", "criterion", "groq/llama3-70b-8192")
+    result = judge_pair("q", "out_v1", "out_v2", "criterion", "groq/llama3-70b-8192", votes=3)
     assert result["verdict"] == "regressed"
     assert result["confidence"] == "medium"
     assert result["score_v1"] == 1.0
@@ -38,64 +38,64 @@ def test_majority_a_is_regressed_medium_confidence(mock_comp):
     assert result["delta"] == -1.0
 
 
-@patch("llmdiff.judge.litellm.completion")
+@patch("backend.judge.litellm.completion")
 def test_all_different_falls_back_to_tie_low_confidence(mock_comp):
     mock_comp.side_effect = _side_effects("A\nr1", "B\nr2", "tie\nr3")
-    result = judge_pair("q", "out_v1", "out_v2", "criterion", "groq/llama3-70b-8192")
+    result = judge_pair("q", "out_v1", "out_v2", "criterion", "groq/llama3-70b-8192", votes=3)
     assert result["confidence"] == "low"
 
 
-@patch("llmdiff.judge.litellm.completion")
+@patch("backend.judge.litellm.completion")
 def test_tie_scores_are_point_five(mock_comp):
     mock_comp.side_effect = _side_effects("tie\nequal", "tie\nequal", "tie\nequal")
-    result = judge_pair("q", "out_v1", "out_v2", "criterion", "groq/llama3-70b-8192")
+    result = judge_pair("q", "out_v1", "out_v2", "criterion", "groq/llama3-70b-8192", votes=3)
     assert result["score_v1"] == 0.5
     assert result["score_v2"] == 0.5
     assert result["delta"] == 0.0
     assert result["verdict"] == "neutral"
 
 
-@patch("llmdiff.judge.litellm.completion")
+@patch("backend.judge.litellm.completion")
 def test_delta_calculation(mock_comp):
     # B wins: delta should be +1.0
     mock_comp.side_effect = _side_effects("B\nr", "B\nr", "B\nr")
-    result = judge_pair("q", "v1", "v2", "criterion", "model")
+    result = judge_pair("q", "v1", "v2", "criterion", "model", votes=3)
     assert result["delta"] == pytest.approx(1.0)
 
 
-@patch("llmdiff.judge.litellm.completion")
+@patch("backend.judge.litellm.completion")
 def test_judge_test_case_improved_verdict(mock_comp):
-    # 3 criteria all returning B (improved)
+    # 3 criteria all returning B (improved), 3 votes each = 9 calls
     mock_comp.side_effect = _side_effects(*["B\nr"] * 9)
     runner_result = {"id": "tc_1", "input": "q", "output_v1": "v1", "output_v2": "v2"}
-    result = judge_test_case(runner_result, ["c1", "c2", "c3"], "model")
+    result = judge_test_case(runner_result, ["c1", "c2", "c3"], "model", votes=3)
     assert result["overall_verdict"] == "improved"
     assert len(result["criteria_results"]) == 3
 
 
-@patch("llmdiff.judge.litellm.completion")
+@patch("backend.judge.litellm.completion")
 def test_judge_test_case_regressed_verdict(mock_comp):
-    # All criteria returning A (regressed)
+    # All criteria returning A (regressed), 3 votes each = 9 calls
     mock_comp.side_effect = _side_effects(*["A\nr"] * 9)
     runner_result = {"id": "tc_1", "input": "q", "output_v1": "v1", "output_v2": "v2"}
-    result = judge_test_case(runner_result, ["c1", "c2", "c3"], "model")
+    result = judge_test_case(runner_result, ["c1", "c2", "c3"], "model", votes=3)
     assert result["overall_verdict"] == "regressed"
 
 
-@patch("llmdiff.judge.litellm.completion")
+@patch("backend.judge.litellm.completion")
 def test_judge_test_case_neutral_verdict(mock_comp):
-    # All criteria tie → delta=0 → neutral
+    # All criteria tie → delta=0 → neutral, 3 votes each = 9 calls
     mock_comp.side_effect = _side_effects(*["tie\nr"] * 9)
     runner_result = {"id": "tc_1", "input": "q", "output_v1": "v1", "output_v2": "v2"}
-    result = judge_test_case(runner_result, ["c1", "c2", "c3"], "model")
+    result = judge_test_case(runner_result, ["c1", "c2", "c3"], "model", votes=3)
     assert result["overall_verdict"] == "neutral"
 
 
-@patch("llmdiff.judge.litellm.completion")
+@patch("backend.judge.litellm.completion")
 def test_absolute_mode_improved(mock_comp):
-    # v1 scores: 0.6, 0.6 → avg 0.6; v2 scores: 0.9, 0.9 → avg 0.9; delta = +0.3 → improved
+    # votes=3 → max(1, 3-1)=2 calls per output: v1: 0.6, 0.6 → avg 0.6; v2: 0.9, 0.9 → avg 0.9
     mock_comp.side_effect = _side_effects("0.6", "0.6", "0.9", "0.9")
-    result = judge_pair("q", "out_v1", "out_v2", "criterion", "model", reference_answer="ref ans")
+    result = judge_pair("q", "out_v1", "out_v2", "criterion", "model", reference_answer="ref ans", votes=3)
     assert result["verdict"] == "improved"
     assert result["delta"] == pytest.approx(0.3, abs=0.01)
     assert result["score_v1"] == pytest.approx(0.6, abs=0.01)
@@ -103,20 +103,20 @@ def test_absolute_mode_improved(mock_comp):
     assert result["confidence"] == "high"
 
 
-@patch("llmdiff.judge.litellm.completion")
+@patch("backend.judge.litellm.completion")
 def test_absolute_mode_regressed(mock_comp):
-    # v1 scores: 0.8, 0.8 → avg 0.8; v2 scores: 0.4, 0.4 → avg 0.4; delta = -0.4 → regressed
+    # votes=3 → 2 calls per output: v1: 0.8, 0.8 → avg 0.8; v2: 0.4, 0.4 → avg 0.4
     mock_comp.side_effect = _side_effects("0.8", "0.8", "0.4", "0.4")
-    result = judge_pair("q", "out_v1", "out_v2", "criterion", "model", reference_answer="ref ans")
+    result = judge_pair("q", "out_v1", "out_v2", "criterion", "model", reference_answer="ref ans", votes=3)
     assert result["verdict"] == "regressed"
     assert result["delta"] == pytest.approx(-0.4, abs=0.01)
 
 
-@patch("llmdiff.judge.litellm.completion")
+@patch("backend.judge.litellm.completion")
 def test_absolute_mode_uses_absolute_prompt(mock_comp):
-    # Verify that ABSOLUTE_JUDGE_PROMPT is used (not JUDGE_PROMPT) when reference_answer is set
+    # votes=3 → 2 calls per output = 4 total; verify ABSOLUTE_JUDGE_PROMPT is used
     mock_comp.side_effect = _side_effects("0.7", "0.7", "0.7", "0.7")
-    judge_pair("my question", "out_v1", "out_v2", "criterion", "model", reference_answer="the ref")
+    judge_pair("my question", "out_v1", "out_v2", "criterion", "model", reference_answer="the ref", votes=3)
     assert mock_comp.call_count == 4
     first_call_content = mock_comp.call_args_list[0][1]["messages"][0]["content"]
     assert "my question" in first_call_content
@@ -124,18 +124,18 @@ def test_absolute_mode_uses_absolute_prompt(mock_comp):
     assert "Response A" not in first_call_content  # JUDGE_PROMPT uses "Response A"
 
 
-@patch("llmdiff.judge.litellm.completion")
+@patch("backend.judge.litellm.completion")
 def test_ab_mode_unchanged_without_reference(mock_comp):
-    # No reference_answer → original A/B path, JUDGE_PROMPT used
+    # No reference_answer → original A/B path, JUDGE_PROMPT used; votes=3 → 3 calls
     mock_comp.side_effect = _side_effects("B\nr", "B\nr", "B\nr")
-    result = judge_pair("q", "out_v1", "out_v2", "criterion", "model", reference_answer=None)
+    result = judge_pair("q", "out_v1", "out_v2", "criterion", "model", reference_answer=None, votes=3)
     assert result["verdict"] == "improved"
     assert mock_comp.call_count == 3  # 3 votes, not 4 absolute calls
     first_call_content = mock_comp.call_args_list[0][1]["messages"][0]["content"]
     assert "Response A" in first_call_content  # JUDGE_PROMPT signature
 
 
-@patch("llmdiff.judge.litellm.completion")
+@patch("backend.judge.litellm.completion")
 def test_judge_run_returns_full_shape(mock_comp):
     mock_comp.side_effect = _side_effects(*["B\nr"] * 30)
     config = {
