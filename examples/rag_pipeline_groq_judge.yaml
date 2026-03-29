@@ -1,9 +1,9 @@
-model: vertex_ai/gemini-2.5-pro
-
-# Judge uses a different Gemini model to reduce same-model self-preference bias.
-# gemini-2.0-flash (runner) vs gemini-1.5-pro (judge) are architecturally
-# distinct enough to provide meaningful cross-model evaluation.
-judge_model: vertex_ai/gemini-2.5-pro
+# Cross-family judging: Gemini generates, Llama judges.
+# This is the most bias-resistant setup — different architecture,
+# different training data, different company. Requires both
+# GOOGLE_API_KEY and GROQ_API_KEY to be set.
+model: gemini/gemini-2.0-flash
+judge_model: groq/llama3-70b-8192
 
 test_cases:
   - id: tc_001
