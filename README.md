@@ -8,7 +8,7 @@
 
 <br/>
 
-![LLM Diff dashboard — side-by-side prompt comparison and score trend chart](img/terminal.png)
+![LLM Diff dashboard — side-by-side prompt comparison and score trend chart]((https://raw.githubusercontent.com/SIMETRAL55/llm-diff/main/img/terminal.png))
 
 <br/>
 
