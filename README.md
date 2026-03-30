@@ -1,4 +1,4 @@
-# LLM Diff
+# LLM Regress
 
 > Prompt regression testing for RAG pipelines. Like git diff, but for AI.
 
@@ -8,11 +8,11 @@
 
 <br/>
 
-![LLM Diff dashboard — side-by-side prompt comparison and score trend chart](https://raw.githubusercontent.com/SIMETRAL55/llm-diff/main/img/terminal.png)
+![LLM Regress dashboard — side-by-side prompt comparison and score trend chart](https://raw.githubusercontent.com/SIMETRAL55/llm-diff/main/img/terminal.png)
 
 <br/>
 
-## Why LLM Diff
+## Why LLM Regress
 
 - **You changed a prompt. Did it get better?** Find out in 2 minutes.
 - **Works with any LLM** — OpenAI, Anthropic, Google Gemini, and more.
