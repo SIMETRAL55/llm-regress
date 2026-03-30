@@ -8,7 +8,7 @@
 
 <br/>
 
-![LLM Regress dashboard — side-by-side prompt comparison and score trend chart](https://raw.githubusercontent.com/SIMETRAL55/llm-diff/main/img/terminal.png)
+![LLM Regress dashboard — side-by-side prompt comparison and score trend chart](https://raw.githubusercontent.com/SIMETRAL55/llm-regress/main/img/terminal.png)
 
 <br/>
 
