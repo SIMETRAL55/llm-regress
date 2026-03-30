@@ -38,8 +38,8 @@ dev = ["pytest>=8.0"]
 llmregress = "llmregress.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/SIMETRAL55/llm-diff"
-Repository = "https://github.com/SIMETRAL55/llm-diff"
+Homepage = "https://github.com/SIMETRAL55/llm-regress"
+Repository = "https://github.com/SIMETRAL55/llm-regress"
 
 [tool.setuptools.packages.find]
 where = ["."]
