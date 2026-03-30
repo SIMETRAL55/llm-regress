@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>llm diff</title>
+  <title>llm regress</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
@@ -236,7 +236,7 @@
     .tc-outputs { display: grid; grid-template-columns: 1fr 44px 1fr; gap: 10px; align-items: start; margin-bottom: 18px; }
     .output-col { display: flex; flex-direction: column; gap: 5px; }
     .output-col-header { display: flex; align-items: center; justify-content: space-between; }
-    .output-label { font-size: 11px; font-weight: 600; color: var(--text-2); text-transform: uppercase; letter-spacing: 0.06em; }
+    .output-label { font-size: 11px; font-weight: 600; color: var(--text-2); text-transform: uppercase; letter-spacing: 0.06em; display: flex; align-items: center; gap: 0; }
     .copy-btn {
       padding: 2px 7px; border-radius: 4px; font-size: 10px;
       background: var(--bg-elevated); border: 1px solid var(--border);
@@ -292,11 +292,23 @@
 
     /* ── Live run view ───────────────────────────────────────────── */
     .live-view { flex: 1; overflow-y: auto; padding: 18px 22px; }
-    .live-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+    .live-stats-row { display: flex; align-items: center; gap: 16px; margin-bottom: 14px; padding: 10px 14px; background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 8px; }
+    .live-stat { display: flex; align-items: center; gap: 5px; font-family: 'JetBrains Mono', monospace; font-size: 12px; }
+    .live-stat-icon { font-size: 13px; }
+    .live-stat-val { font-weight: 600; }
+    .live-stat.improved { color: var(--accent); }
+    .live-stat.regressed { color: var(--danger); }
+    .live-stat.neutral { color: var(--text-2); }
+    .live-stat-elapsed { margin-left: auto; font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--text-3); }
+    .live-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
     .live-title { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--text-2); }
+    .live-pct { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--text-3); }
     .live-counter { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--text-3); }
-    .live-progress-track { height: 3px; background: var(--border); border-radius: 2px; overflow: hidden; margin-bottom: 16px; }
+    .live-progress-track { height: 3px; background: var(--border); border-radius: 2px; overflow: hidden; margin-bottom: 8px; }
     .live-progress-fill { height: 100%; background: var(--accent); border-radius: 2px; transition: width 0.5s cubic-bezier(0.4,0,0.2,1); }
+    .live-phase-label { font-size: 11px; color: var(--text-3); font-family: 'JetBrains Mono', monospace; margin-bottom: 14px; display: flex; align-items: center; gap: 6px; }
+    .live-phase-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); animation: pulse-dot 1.2s ease-in-out infinite; flex-shrink: 0; }
+    @keyframes pulse-dot { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
     .live-cards { display: flex; flex-direction: column; gap: 10px; }
 
     .live-card {
@@ -422,10 +434,10 @@ function deltaFmt(d) {
 
 /* ── useTheme ─────────────────────────────────────────────────────── */
 function useTheme() {
-  const [theme, setTheme] = useState(() => localStorage.getItem('llmdiff_theme') || 'dark');
+  const [theme, setTheme] = useState(() => localStorage.getItem('llmregress_theme') || 'dark');
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
-    localStorage.setItem('llmdiff_theme', theme);
+    localStorage.setItem('llmregress_theme', theme);
   }, [theme]);
   const toggle = useCallback(() => setTheme(t => t === 'dark' ? 'light' : 'dark'), []);
   return [theme, toggle];
@@ -605,6 +617,10 @@ function TestCaseBrowser({ run, filter }) {
   const safeTab = Math.min(activeTab, cases.length - 1);
   const tc = cases[safeTab];
 
+  const judgeLabel = (!run.judge_model || run.judge_model === run.model)
+    ? 'same as runner'
+    : run.judge_model;
+
   return (
     <>
       <div className="tabs-bar">
@@ -615,13 +631,41 @@ function TestCaseBrowser({ run, filter }) {
           </div>
         ))}
       </div>
+      {run.model && (
+        <div style={{ padding: '7px 22px', background: 'var(--bg-surface)', borderBottom: '1px solid var(--border)', display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0 }}>
+          <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 10, background: 'var(--bg-elevated)', border: '1px solid var(--border)', color: 'var(--text-2)', fontFamily: 'JetBrains Mono, monospace', whiteSpace: 'nowrap' }}>
+            Runner: {run.model}
+          </span>
+          <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 10, background: 'var(--bg-elevated)', border: '1px solid var(--border)', color: judgeLabel === 'same as runner' ? 'var(--text-3)' : 'var(--text-2)', fontFamily: 'JetBrains Mono, monospace', whiteSpace: 'nowrap' }}>
+            Judge: {judgeLabel}
+          </span>
+        </div>
+      )}
       <div className="tc-view">
         <div className="tc-outputs">
-          <OutputBox text={tc.output_v1 ?? ''} verdict={tc.overall_verdict === 'regressed' ? 'improved' : ''} label="Prompt V1" />
+          <OutputBox
+            text={tc.output_v1 ?? ''}
+            verdict={tc.overall_verdict === 'regressed' ? 'improved' : ''}
+            label={
+              <>
+                Output v1&nbsp;
+                <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 10, background: 'var(--danger-dim)', color: 'var(--danger)', fontWeight: 600, letterSpacing: '0.04em', textTransform: 'none' }}>old prompt</span>
+              </>
+            }
+          />
           <div className="verdict-center">
             <div className={`verdict-pill ${tc.overall_verdict}`}>{verdictIcon(tc.overall_verdict)}</div>
           </div>
-          <OutputBox text={tc.output_v2 ?? ''} verdict={tc.overall_verdict === 'improved' ? 'improved' : tc.overall_verdict === 'regressed' ? 'regressed' : ''} label="Prompt V2" />
+          <OutputBox
+            text={tc.output_v2 ?? ''}
+            verdict={tc.overall_verdict === 'improved' ? 'improved' : tc.overall_verdict === 'regressed' ? 'regressed' : ''}
+            label={
+              <>
+                Output v2&nbsp;
+                <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 10, background: 'var(--accent-dim)', color: 'var(--accent)', fontWeight: 600, letterSpacing: '0.04em', textTransform: 'none' }}>new prompt</span>
+              </>
+            }
+          />
         </div>
         {tc.criteria_results?.length > 0 && (
           <div className="criteria-section">
@@ -674,24 +718,51 @@ function SkeletonCard({ processingLabel }) {
 }
 
 /* ── LiveRunView ──────────────────────────────────────────────────── */
-function LiveRunView({ liveCards, liveTotal, liveRunning, livePhase }) {
-  const pct = liveTotal > 0 ? Math.min((liveCards.length / liveTotal) * 100, 100) : (liveRunning ? 5 : 100);
+function LiveRunView({ liveCards, liveTotal, liveRunning, livePhase, liveElapsed }) {
+  const completed = liveCards.length;
+  const total = liveTotal > 0 ? liveTotal : (liveRunning ? 0 : completed);
+  const pct = total > 0 ? Math.min((completed / total) * 100, 100) : (liveRunning ? 5 : 100);
+
+  const improved  = liveCards.filter(c => c.overall_verdict === 'improved').length;
+  const regressed = liveCards.filter(c => c.overall_verdict === 'regressed').length;
+  const neutral   = liveCards.filter(c => c.overall_verdict === 'neutral').length;
+
+  const fmtElapsed = s => s < 60 ? `${s}s` : `${Math.floor(s/60)}m ${s%60}s`;
+
+  const showStats = liveRunning || completed > 0;
+
   return (
     <div className="live-view">
+      {showStats && (
+        <div className="live-stats-row">
+          <div className="live-stat improved"><span className="live-stat-icon">↑</span><span className="live-stat-val">{improved}</span><span style={{fontSize:11,color:'var(--text-3)'}}>improved</span></div>
+          <div className="live-stat regressed"><span className="live-stat-icon">↓</span><span className="live-stat-val">{regressed}</span><span style={{fontSize:11,color:'var(--text-3)'}}>regressed</span></div>
+          <div className="live-stat neutral"><span className="live-stat-icon">→</span><span className="live-stat-val">{neutral}</span><span style={{fontSize:11,color:'var(--text-3)'}}>neutral</span></div>
+          {liveElapsed > 0 && <span className="live-stat-elapsed">{fmtElapsed(liveElapsed)}</span>}
+        </div>
+      )}
       <div className="live-header">
         <span className="live-title">
           {liveRunning
-            ? liveTotal > 0
-              ? `${liveCards.length} / ${liveTotal} test cases`
-              : 'starting…'
-            : `Complete — ${liveCards.length} / ${liveTotal} test cases`
+            ? total > 0
+              ? `${completed} / ${total} test cases`
+              : (livePhase || 'initialising…')
+            : `Complete — ${completed} / ${total} test cases`
           }
         </span>
-        {liveRunning && livePhase && <span className="live-counter">{livePhase}</span>}
+        {liveRunning && total > 0 && (
+          <span className="live-pct">{Math.round(pct)}%</span>
+        )}
       </div>
       <div className="live-progress-track">
         <div className="live-progress-fill" style={{ width: `${pct}%` }} />
       </div>
+      {liveRunning && livePhase && livePhase !== 'initialising…' && (
+        <div className="live-phase-label">
+          <span className="live-phase-dot" />
+          {livePhase}
+        </div>
+      )}
       <div className="live-cards">
         {liveCards.slice().reverse().map(tc => (
           <div key={tc.id} className={`live-card ${tc.overall_verdict}`}>
@@ -791,14 +862,17 @@ function App() {
   const [liveTotal, setLiveTotal] = useState(0);
   const [livePhase, setLivePhase] = useState('');
   const [filter, setFilter] = useState('all');
-  const [lastYaml, setLastYaml] = useState(() => localStorage.getItem('llmdiff_last_yaml') || '');
+  const [lastYaml, setLastYaml] = useState(() => localStorage.getItem('llmregress_last_yaml') || '');
 
   const [loadingRun, setLoadingRun] = useState(false);
+
+  const [liveElapsed, setLiveElapsed] = useState(0);
 
   const readerRef = useRef(null);
   const liveRunIdRef = useRef(null);
   const runCacheRef = useRef({});   // cache full run data by run_id
   const userPickedRef = useRef(false);  // true when user manually clicked a past run
+  const elapsedTimerRef = useRef(null);
 
   /* Fetch run list */
   const fetchRuns = useCallback(async () => {
@@ -863,6 +937,7 @@ function App() {
   const stopRun = useCallback(() => {
     try { readerRef.current?.cancel?.(); } catch {}
     readerRef.current = null;
+    clearInterval(elapsedTimerRef.current);
     setLiveRunning(false);
     setLivePhase('stopped');
     // stay on live view so user sees the partial results
@@ -881,11 +956,14 @@ function App() {
     setLiveCards([]);
     setLiveTotal(0);
     setLivePhase('initialising…');
+    setLiveElapsed(0);
     liveRunIdRef.current = null;
     userPickedRef.current = false;
+    clearInterval(elapsedTimerRef.current);
+    elapsedTimerRef.current = setInterval(() => setLiveElapsed(prev => prev + 1), 1000);
 
     setLastYaml(yamlFile);
-    localStorage.setItem('llmdiff_last_yaml', yamlFile);
+    localStorage.setItem('llmregress_last_yaml', yamlFile);
 
     try { readerRef.current?.cancel?.(); } catch {}
 
@@ -902,6 +980,7 @@ function App() {
       function pump() {
         reader.read().then(({ done, value }) => {
           if (done) {
+            clearInterval(elapsedTimerRef.current);
             setLiveRunning(false);
             setLivePhase('');
             return;
@@ -920,13 +999,14 @@ function App() {
             if (ev === 'start') {
               setLiveTotal(data.total ?? 0);
               liveRunIdRef.current = data.run_id ?? null;
-              setLivePhase('running test cases…');
+              setLivePhase(`running ${data.total ?? 0} test cases…`);
             } else if (ev === 'result') {
               setLiveCards(prev => [...prev, data]);
-              setLivePhase(`judged ${data.id}`);
+              setLivePhase(`judging next test case…`);
             } else if (ev === 'done') {
+              clearInterval(elapsedTimerRef.current);
               setLiveRunning(false);
-              setLivePhase('done!');
+              setLivePhase('done');
               readerRef.current = null;
               fetchRuns().then(() => {
                 if (!userPickedRef.current) {
@@ -939,12 +1019,14 @@ function App() {
           }
           pump();
         }).catch(() => {
+          clearInterval(elapsedTimerRef.current);
           setLiveRunning(false);
           setLivePhase('');
         });
       }
       pump();
     }).catch(() => {
+      clearInterval(elapsedTimerRef.current);
       setLiveRunning(false);
       setLivePhase('error');
     });
@@ -961,7 +1043,7 @@ function App() {
       <aside className="sidebar">
         <div className="sidebar-header">
           <div className="sidebar-brand">
-            <div className="sidebar-logo">llm diff</div>
+            <div className="sidebar-logo">llm regress</div>
             <div className="sidebar-tagline">prompt regression testing</div>
           </div>
           <button className="theme-toggle" onClick={toggleTheme} title="Toggle theme">
@@ -1004,7 +1086,7 @@ function App() {
               }
             </div>
           )}
-          {runs.length === 0 && !isLive && (
+          {runs.length === 0 && !liveRunning && (
             <div className="run-list-empty">no runs yet</div>
           )}
           {runs.map(r => {
@@ -1078,7 +1160,7 @@ function App() {
               </button>
             </>
           ) : (
-            <span className="main-header-title" style={{ color: 'var(--text-3)' }}>llm diff</span>
+            <span className="main-header-title" style={{ color: 'var(--text-3)' }}>llm regress</span>
           )}
         </div>
 
@@ -1090,6 +1172,7 @@ function App() {
               liveTotal={liveTotal}
               liveRunning={liveRunning}
               livePhase={livePhase}
+              liveElapsed={liveElapsed}
             />
           ) : hasRun ? (
             <TestCaseBrowser run={selectedRun} filter={filter} />
@@ -1104,7 +1187,7 @@ function App() {
               <div className="empty-sub">
                 Run a YAML test file to see prompt comparisons here.
               </div>
-              <div className="empty-cmd">llmdiff compare examples/rag_pipeline.yaml</div>
+              <div className="empty-cmd">llmregress compare examples/rag_pipeline.yaml</div>
               <div className="empty-hint">or press <span className="kbd">N</span> to start a run from the browser</div>
             </div>
           )}

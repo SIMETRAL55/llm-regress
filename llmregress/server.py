@@ -8,24 +8,23 @@ from functools import partial
 import yaml
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, JSONResponse
-from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, field_validator
 from sse_starlette.sse import EventSourceResponse
 
-from backend import storage
-from backend.runner import run_test_cases
-from backend.judge import judge_test_case
+from llmregress import storage
+from llmregress.runner import run_test_cases
+from llmregress.judge import judge_test_case
 
-DB_PATH = os.environ.get("LLMDIFF_DB_PATH", "~/.llmdiff/history.db")
-PORT = int(os.environ.get("LLMDIFF_PORT", "7331"))
+DB_PATH = os.environ.get("LLMREGRESS_DB_PATH", "~/.llmregress/history.db")
+PORT = int(os.environ.get("LLMREGRESS_PORT", "7331"))
 
 # Directory where YAML test files are allowed to be loaded from.
 # Only files within this directory (non-recursively following symlinks) are
 # permitted when the UI submits a run request.
-_ALLOWED_YAML_DIR = Path(os.environ.get("LLMDIFF_YAML_DIR", str(Path.home() / ".llmdiff" / "tests"))).resolve()
+_ALLOWED_YAML_DIR = Path(os.environ.get("LLMREGRESS_YAML_DIR", str(Path.home() / ".llmregress" / "tests"))).resolve()
 
 # Allowlist of model-string prefixes accepted by the streaming endpoint.
-# Operators can extend this list via the LLMDIFF_ALLOWED_PROVIDERS env var
+# Operators can extend this list via the LLMREGRESS_ALLOWED_PROVIDERS env var
 # (comma-separated prefixes, e.g. "groq/,openai/,ollama/").
 _DEFAULT_ALLOWED_PROVIDERS = {
     "groq/",
@@ -41,7 +40,7 @@ _DEFAULT_ALLOWED_PROVIDERS = {
     "azure/",
 }
 
-_env_providers = os.environ.get("LLMDIFF_ALLOWED_PROVIDERS", "")
+_env_providers = os.environ.get("LLMREGRESS_ALLOWED_PROVIDERS", "")
 ALLOWED_PROVIDERS: frozenset[str] = frozenset(
     p.strip() for p in _env_providers.split(",") if p.strip()
 ) or frozenset(_DEFAULT_ALLOWED_PROVIDERS)
@@ -58,22 +57,38 @@ def _validate_model_string(model: str) -> None:
 
 def _resolve_yaml_path(yaml_file: str) -> Path:
     """Resolve yaml_file to an absolute path and verify it stays within
-    _ALLOWED_YAML_DIR. Raises ValueError on path-traversal attempts."""
-    # Accept absolute paths only within the allowed dir, or bare filenames
-    # relative to the allowed dir.
+    an allowed directory. Raises ValueError on path-traversal attempts.
+
+    Allowed roots (in priority order):
+      1. CWD — the directory where ``llmregress serve`` was started
+      2. _ALLOWED_YAML_DIR — ~/.llmregress/tests (or LLMREGRESS_YAML_DIR)
+    """
     candidate = Path(yaml_file)
-    if not candidate.is_absolute():
-        candidate = _ALLOWED_YAML_DIR / candidate
+    cwd = Path.cwd().resolve()
 
-    resolved = candidate.resolve()
+    if candidate.is_absolute():
+        resolved = candidate.resolve()
+    else:
+        # Try CWD first (covers "examples/rag_pipeline.yaml" when the user
+        # runs `llmregress serve` from the project root).
+        cwd_resolved = (cwd / candidate).resolve()
+        if cwd_resolved.exists():
+            resolved = cwd_resolved
+        else:
+            resolved = (_ALLOWED_YAML_DIR / candidate).resolve()
 
-    # Ensure the resolved path is inside the allowed directory.
-    try:
-        resolved.relative_to(_ALLOWED_YAML_DIR)
-    except ValueError:
+    # Permit paths inside CWD or the explicit allowed dir.
+    def _within(path: Path, root: Path) -> bool:
+        try:
+            path.relative_to(root)
+            return True
+        except ValueError:
+            return False
+
+    if not (_within(resolved, cwd) or _within(resolved, _ALLOWED_YAML_DIR)):
         raise ValueError(
-            f"yaml_file path '{yaml_file}' is outside the allowed directory "
-            f"'{_ALLOWED_YAML_DIR}'. Set LLMDIFF_YAML_DIR to change this."
+            f"yaml_file path '{yaml_file}' is outside the allowed directories. "
+            f"Run llmregress serve from your project root, or set LLMREGRESS_YAML_DIR."
         )
 
     if not resolved.exists():
@@ -82,9 +97,9 @@ def _resolve_yaml_path(yaml_file: str) -> Path:
     return resolved
 
 
-app = FastAPI(title="LLM Diff")
+app = FastAPI(title="LLM Regress")
 
-_STATIC_DIR = Path(__file__).parent / "static"
+_UI_HTML = Path(__file__).parent / "templates" / "ui.html"
 
 
 @app.on_event("startup")
@@ -94,10 +109,7 @@ def startup():
 
 @app.get("/")
 def index():
-    index_file = _STATIC_DIR / "index.html"
-    if index_file.exists():
-        return FileResponse(index_file)
-    return JSONResponse({"message": "LLM Diff — run `npm run build` in frontend/ first"}, status_code=503)
+    return FileResponse(_UI_HTML)
 
 
 @app.get("/api/runs")
@@ -205,6 +217,7 @@ async def api_stream_run(req: StreamRequest):
             "timestamp": timestamp,
             "yaml_file": str(yaml_path),
             "model": config.get("model", ""),
+            "judge_model": judge_model,
             "test_cases": judged_cases,
             "summary": summary,
         }
@@ -220,11 +233,6 @@ async def api_stream_run(req: StreamRequest):
 def start():
     import uvicorn
     # Bind to localhost only. To expose on a network interface, set the
-    # LLMDIFF_HOST env var explicitly (e.g. LLMDIFF_HOST=0.0.0.0 for Docker).
-    host = os.environ.get("LLMDIFF_HOST", "127.0.0.1")
-    uvicorn.run("backend.server:app", host=host, port=PORT, reload=False)
-
-
-# Mount static files last so API routes take priority
-if _STATIC_DIR.exists():
-    app.mount("/", StaticFiles(directory=_STATIC_DIR, html=True), name="static")
+    # LLMREGRESS_HOST env var explicitly (e.g. LLMREGRESS_HOST=0.0.0.0 for Docker).
+    host = os.environ.get("LLMREGRESS_HOST", "127.0.0.1")
+    uvicorn.run("llmregress.server:app", host=host, port=PORT, reload=False)

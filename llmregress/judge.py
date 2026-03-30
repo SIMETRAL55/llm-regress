@@ -6,7 +6,7 @@ from typing import Callable
 
 import litellm
 
-from backend import config as _cfg
+from llmregress import config as _cfg
 
 logger = logging.getLogger(__name__)
 
@@ -307,6 +307,7 @@ def judge_run(
         "timestamp": timestamp,
         "yaml_file": config.get("yaml_file", ""),
         "model": config.get("model", ""),
+        "judge_model": judge_model,
         "test_cases": judged_cases,
         "summary": {
             "total": len(judged_cases),

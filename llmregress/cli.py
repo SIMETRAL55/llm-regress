@@ -8,11 +8,11 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from backend import version
-from backend.runner import run_test_cases
-from backend.judge import judge_run
-from backend import storage
-from backend import config as _cfg
+from llmregress import version
+from llmregress.runner import run_test_cases
+from llmregress.judge import judge_run
+from llmregress import storage
+from llmregress import config as _cfg
 
 DB_PATH = _cfg.DB_PATH
 
@@ -40,7 +40,7 @@ def _check_thresholds(summary: dict, threshold_config: dict) -> tuple[bool, str]
 @click.group()
 @click.version_option(version, "--version", "-V")
 def main():
-    """LLM Diff — prompt regression testing for RAG pipelines."""
+    """LLM Regress — prompt regression testing for RAG pipelines."""
 
 
 @main.command()
@@ -143,7 +143,7 @@ def _render_diff(run_result: dict) -> None:
     neutral_txt = click.style(f"{s['neutral']} neutral", dim=True)
     click.echo(f"{improved_txt}  ·  {regressed_txt}  ·  {neutral_txt}")
     click.echo()
-    click.echo("Run `llmdiff serve` to explore results in the dashboard")
+    click.echo("Run `llmregress serve` to explore results in the dashboard")
 
 
 def _status(msg: str, *, erase: bool = False) -> None:
@@ -231,7 +231,7 @@ def compare(yaml_file, ci):
         neutral_txt = click.style(f"{s['neutral']} neutral", dim=True)
         click.echo(f"{improved_txt}  ·  {regressed_txt}  ·  {neutral_txt}")
         click.echo()
-        click.echo("Run `llmdiff serve` to explore results in the dashboard")
+        click.echo("Run `llmregress serve` to explore results in the dashboard")
 
         if "threshold" in config:
             passed, msg = _check_thresholds(s, config["threshold"])
@@ -247,7 +247,7 @@ def history():
     runs = storage.list_runs(DB_PATH)
 
     if not runs:
-        click.echo("No runs yet. Run `llmdiff compare your_tests.yaml` to get started.")
+        click.echo("No runs yet. Run `llmregress compare your_tests.yaml` to get started.")
         return
 
     header = click.style(
@@ -271,8 +271,8 @@ def history():
 @main.command()
 def serve():
     """Start the web UI at localhost:7331."""
-    click.echo(f"Starting LLM Diff dashboard at http://localhost:{_cfg.PORT}")
-    from backend.server import start
+    click.echo(f"Starting LLM Regress dashboard at http://localhost:{_cfg.PORT}")
+    from llmregress.server import start
     start()
 
 
@@ -429,6 +429,7 @@ def demo():
         "timestamp": timestamp,
         "yaml_file": "demo",
         "model": "demo/mock",
+        "judge_model": "demo/mock",
         "test_cases": DEMO_TEST_CASES,
         "summary": {
             "total": len(DEMO_TEST_CASES),
@@ -444,4 +445,4 @@ def demo():
 
     storage.save_run(run_result, DB_PATH)
     click.echo()
-    click.echo('Demo complete. Run `llmdiff serve` to see the dashboard.')
+    click.echo('Demo complete. Run `llmregress serve` to see the dashboard.')

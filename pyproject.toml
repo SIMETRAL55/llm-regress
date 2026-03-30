@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "llmregress"
-version = "0.1.0"
+version = "0.1.4"
 description = "Prompt regression testing for RAG pipelines. Like git diff, but for AI."
 readme = "README.md"
 license = { text = "MIT" }
@@ -35,7 +35,7 @@ dependencies = [
 dev = ["pytest>=8.0"]
 
 [project.scripts]
-llmregress = "backend.cli:main"
+llmregress = "llmregress.cli:main"
 
 [project.urls]
 Homepage = "https://github.com/SIMETRAL55/llm-diff"
@@ -43,4 +43,4 @@ Repository = "https://github.com/SIMETRAL55/llm-diff"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["backend*"]
+include = ["llmregress*"]
