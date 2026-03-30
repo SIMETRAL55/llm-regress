@@ -4,5 +4,4 @@ docs/
 .env
 CLAUDE.md
 __pycache__/
-llmdiff.egg-info/
-llmdiff/
+llmregress.egg-info/
