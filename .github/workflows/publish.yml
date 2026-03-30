@@ -19,6 +19,13 @@ jobs:
       - name: Install build tools
         run: pip install build twine
 
+      - name: Sync version from tag
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"    # strip leading "v": v0.1.5 → 0.1.5
+          sed -i "s/^version = \".*\"/version = \"${VERSION}\"/" pyproject.toml
+          echo "version set to ${VERSION}"
+          grep "^version" pyproject.toml
+
       - name: Build
         run: python -m build
 

@@ -44,3 +44,6 @@ Repository = "https://github.com/SIMETRAL55/llm-diff"
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["llmregress*"]
+
+[tool.setuptools.package-data]
+llmregress = ["templates/*.html"]
