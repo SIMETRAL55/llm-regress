@@ -16,7 +16,6 @@
 
 - **You changed a prompt. Did it get better?** Find out in 2 minutes.
 - **Works with any LLM** — OpenAI, Anthropic, Google Gemini, and more.
-- **Local-first.** No accounts, no cloud, no data leaves your machine.
 - **One env var.** Set your API key and you're done.
 
 ## Quickstart
